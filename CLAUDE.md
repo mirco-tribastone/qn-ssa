@@ -125,20 +125,37 @@ def erlang_k_distribution(k: int, lambda_rate: float) -> rv_continuous:
 
 ## Project Organization Standards
 
-### Recommended Directory Structure
+### Directory Structure (qn-ssa)
 ```
-project_root/
+qn-ssa/
 ├── src/
-│   ├── models/          # System models (queues, reactions, etc.)
-│   ├── simulators/      # Simulation engines (Gillespie, discrete-event)
-│   ├── distributions/   # Phase-type and other distributions
-│   ├── analysis/        # Performance metrics, statistical analysis
-│   └── utils/           # Helper functions, random number generation
-├── examples/            # Tutorial notebooks and example scripts
-├── tests/               # Unit tests and validation
-├── docs/                # Documentation
-└── README.md
+│   └── qn_ssa/                      # Main package (src layout)
+│       ├── models/                  # System models (MPP, queues, reactions)
+│       │   └── markov_population.py # Markov population process class
+│       ├── simulators/              # Simulation engines
+│       │   └── gillespie_ssa.py    # Gillespie SSA implementation
+│       ├── analysis/                # Performance metrics, statistical analysis
+│       │   └── metrics.py          # Metric tracking and results
+│       └── utils/                   # Utilities and helper functions
+│           ├── validation.py       # Analytical formulas (M/M/1, M/M/c, M/G/1)
+│           └── phase_type.py       # Phase-type distributions (Coxian, hyper-exp)
+├── examples/                        # Example scripts and validation
+│   ├── mm1_queue_example.py        # M/M/1 queue simulation
+│   ├── mmc_queue_example.py        # M/M/c queue simulation
+│   └── mcox2_1_queue_example.py    # M/Cox2/1 queue simulation
+├── tests/                           # Unit tests and validation
+├── docs/                            # Documentation and references
+├── setup.py                         # Package configuration (PyPI-ready)
+├── requirements.txt                 # Dependencies
+├── .gitignore                       # Git exclusions
+└── README.md                        # Project documentation
 ```
+
+**Key Design Decisions:**
+- **src layout**: Package under `src/qn_ssa/` prevents accidental imports of uninstalled code
+- **Package name**: PyPI name is `qn-ssa`, import name is `qn_ssa` (Python convention)
+- **Flat module structure**: Utilities (phase-type, validation) in single `utils/` module
+- **Installation**: Use `pip install -e .` for development mode
 
 ### Module Organization Principles
 - **Separation of concerns**: Models, simulation logic, and analysis are separate
@@ -146,10 +163,11 @@ project_root/
 - **Composability**: Build complex systems from simple components
 
 ### File Naming Conventions
-- Use descriptive, lowercase names with underscores: `mm1_queue.py`, `phase_type.py`
-- Prefix with domain: `queue_mm1.py`, `queue_mmc.py`, `ph_erlang.py`
-- Simulation scripts: `simulate_*.py` or `*_simulation.py`
-- Analysis scripts: `analyze_*.py` or `*_analysis.py`
+- Use descriptive, lowercase names with underscores: `markov_population.py`, `phase_type.py`
+- Example scripts: `*_example.py` for validation and demonstrations
+- Comparison scripts: `compare_*.py` for side-by-side model analysis
+- Core modules use singular nouns: `metrics.py`, `validation.py`
+- Package imports: Use `from qn_ssa.models import ...` (not `from src.qn_ssa`)
 
 ## Communication Style
 
@@ -173,13 +191,28 @@ For an M/M/1 queue, we need to simulate:
 - Service: Exponential distribution with rate μ
 - Queue discipline: FIFO
 
-The simulation will use discrete-event simulation:
-1. Maintain event queue (arrival and departure events)
-2. Process events in chronological order
-3. Update system state and collect statistics
+The simulation uses Gillespie's SSA (exact stochastic simulation):
+1. Compute propensities (rates) for all events based on current state
+2. Sample time to next event from exponential distribution
+3. Select which event occurs based on relative propensities
+4. Update state and collect time-weighted statistics
+5. Repeat until time horizon reached
 
-Key implementation detail: We'll use a min-heap for the event queue
-to efficiently find the next event (O(log n) operations).
+Example usage:
+```python
+import numpy as np
+from qn_ssa.models import MarkovPopulationProcess
+from qn_ssa.simulators import GillespieSimulator
+
+# Create M/M/1 queue model
+mpp = MarkovPopulationProcess(state_dim=1)
+mpp.add_event(jump=np.array([1]), rate_fn=lambda x: 0.8, label="ARRIVAL")
+mpp.add_event(jump=np.array([-1]), rate_fn=lambda x: 1.0 if x[0] > 0 else 0.0, label="DEPARTURE")
+
+# Simulate
+simulator = GillespieSimulator()
+results = simulator.simulate(mpp, initial_state=np.array([0]), time_horizon=10000.0, n_runs=100, seed=42)
+```
 ```
 
 ## Domain-Specific Guidelines
